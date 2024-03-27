@@ -6,7 +6,7 @@ WORKDIR ${ROOT}
 COPY ./go.mod ./go.sum ./
 RUN go mod download
 
-COPY . /
+COPY ./ ./
 RUN CGO_ENABLED=0 GOOS=linux go build -o main $ROOT/main.go && chmod +x ./main
 
 FROM alpine:3
