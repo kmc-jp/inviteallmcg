@@ -3,10 +3,10 @@ ENV ROOT=/build
 RUN mkdir ${ROOT}
 WORKDIR ${ROOT}
 
-COPY ./go.mod ./go.sum $ROOT/
+COPY ./go.mod ./go.sum ./
 RUN go get
 
-COPY . $ROOT
+COPY . /
 RUN CGO_ENABLED=0 GOOS=linux go build -o main $ROOT/main.go && chmod +x ./main
 
 FROM alpine:3
