@@ -44,8 +44,8 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/walnuts1018/inviteallmcg:latest
-            ghcr.io/walnuts1018/inviteallmcg:${{ github.sha }}-${{ github.run_number }}
+            ghcr.io/kmc-jp/inviteallmcg:latest
+            ghcr.io/kmc-jp/inviteallmcg:${{ github.sha }}-${{ github.run_number }}
 
   SucceessNotification:
     if: ${{ success() }}

@@ -11,10 +11,10 @@ import (
 
 	"github.com/Code-Hex/synchro"
 	"github.com/Code-Hex/synchro/tz"
+	"github.com/kmc-jp/inviteallmcg/config"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 	"github.com/slack-go/slack/socketmode"
-	"github.com/walnuts1018/inviteallmcg/config"
 	"golang.org/x/exp/maps"
 )
 

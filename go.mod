@@ -1,4 +1,4 @@
-module github.com/walnuts1018/inviteallmcg
+module github.com/kmc-jp/inviteallmcg
 
 go 1.22.1
 

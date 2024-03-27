@@ -6,9 +6,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/kmc-jp/inviteallmcg/config"
+	"github.com/kmc-jp/inviteallmcg/slack"
 	"github.com/lmittmann/tint"
-	"github.com/walnuts1018/inviteallmcg/config"
-	"github.com/walnuts1018/inviteallmcg/slack"
 )
 
 func main() {
