@@ -192,6 +192,11 @@ func (c *Client) GetAllMCGMembers(ctx context.Context, mustIncludeUsers ...strin
 func (c *Client) ForwardMessage(ctx context.Context, everythingChannelID string, sourceChannelName string, message slackevents.MessageEvent) error {
 	slog.Debug("Forwarding message", "everythingChannelID", everythingChannelID, "sourceChannelName", sourceChannelName, "message", message)
 
+	if message.SubType != "" && message.SubType != "message_deleted" && message.SubType != "message_changed" {
+		slog.Debug("Ignored message", "message", message)
+		return nil
+	}
+
 	// Deleted, Updatedの場合は無視する
 	// TODO: 実装する
 	if message.SubType == "message_deleted" || message.SubType == "message_changed" {
