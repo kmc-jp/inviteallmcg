@@ -195,7 +195,9 @@ func (c *Client) HandleSlackEvents(ctx context.Context) {
 			if eventsAPIEvent.Type == slackevents.CallbackEvent {
 				innerEvent := eventsAPIEvent.InnerEvent
 				slog.Debug("InnerEvent", "innerEvent", innerEvent)
-				if ev, ok := innerEvent.Data.(*slackevents.MemberJoinedChannelEvent); ok {
+
+				switch ev := innerEvent.Data.(type) {
+				case *slackevents.MemberJoinedChannelEvent:
 					slog.Info("MemberJoinedChannelEvent", "event", ev, "channel", ev.Channel)
 
 					observTarget, err := c.DetermineObservTarget(ctx)
@@ -233,7 +235,7 @@ func (c *Client) HandleSlackEvents(ctx context.Context) {
 						continue
 					}
 
-				} else if ev, ok := innerEvent.Data.(*slackevents.ChannelCreatedEvent); ok {
+				case *slackevents.ChannelCreatedEvent:
 					slog.Info("ChannelCreatedEvent", "event", ev)
 
 					observTarget, err := c.DetermineObservTarget(ctx)
@@ -265,8 +267,8 @@ func (c *Client) HandleSlackEvents(ctx context.Context) {
 						slog.Error("Error inviting MCG members to channel", "error", err)
 						continue
 					}
-				} else {
-					slog.Debug("Ignored inner event", "innerEvent", innerEvent)
+				default:
+					slog.Debug("Ignored event", "event", innerEvent)
 				}
 			}
 		}
