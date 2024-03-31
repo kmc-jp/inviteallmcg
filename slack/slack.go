@@ -154,7 +154,8 @@ func (c *Client) GetAllMCGMembers(ctx context.Context, mustIncludeUser string) (
 
 	mcgMembers := make(map[string]struct{}, 100)
 	for _, user := range users {
-		if user.IsRestricted {
+		// IsRestricted: All Guest accounts, IsUltraRestricted: Single-channel guests
+		if user.IsRestricted && !user.IsUltraRestricted {
 			mcgMembers[user.ID] = struct{}{}
 		}
 	}
@@ -216,6 +217,7 @@ func (c *Client) HandleChannelJoinEvent(ctx context.Context) {
 							slog.Error("Error getting prefixed channels", "error", err)
 							continue
 						}
+						slog.Info("Inviting user to channels", "trigerUser", ev.User, "mcgMembers", mcgMembers, "channelIDs", channelIDs)
 
 						err = c.InviteUsersToChannels(ctx, channelIDs, maps.Keys(mcgMembers))
 						if err != nil {
