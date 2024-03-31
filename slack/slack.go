@@ -197,7 +197,6 @@ func (c *Client) ForwardMessage(ctx context.Context, everythingChannelID string,
 		return nil
 	}
 
-	// Deleted, Updatedの場合は無視する
 	// TODO: 実装する
 	if message.SubType == "message_deleted" || message.SubType == "message_changed" {
 		return nil
