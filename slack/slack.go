@@ -196,43 +196,45 @@ func (c *Client) HandleSlackEvents(ctx context.Context) {
 				innerEvent := eventsAPIEvent.InnerEvent
 				slog.Debug("InnerEvent", "innerEvent", innerEvent)
 				if ev, ok := innerEvent.Data.(*slackevents.MemberJoinedChannelEvent); ok {
+					slog.Info("MemberJoinedChannelEvent", "event", ev, "channel", ev.Channel)
+
 					observTarget, err := c.DetermineObservTarget(ctx)
 					if err != nil {
 						slog.Error("Error determining MCG channel", "error", err)
 						continue
 					}
 
-					if ev.Channel == observTarget.generalChannelID {
-						slog.Debug("MemberJoinedChannelEvent", "event", ev)
-
-						mcgMembers, err := c.GetAllMCGMembers(ctx, ev.User)
-						if err != nil {
-							slog.Error("Error getting MCG members", "error", err)
-							continue
-						}
-
-						if _, ok := mcgMembers[ev.User]; !ok {
-							slog.Info("Join event from non-MCG member, skipping", "user", ev.User)
-							continue
-						}
-
-						channelIDs, err := c.GetPrefixedChannels(ctx, fmt.Sprintf("%s-", observTarget.year))
-						if err != nil {
-							slog.Error("Error getting prefixed channels", "error", err)
-							continue
-						}
-						slog.Info("Inviting user to channels", "trigerUser", ev.User, "mcgMembers", mcgMembers, "channelIDs", channelIDs)
-
-						err = c.InviteUsersToChannels(ctx, channelIDs, maps.Keys(mcgMembers))
-						if err != nil {
-							slog.Error("Error inviting user to channels", "error", err)
-							continue
-						}
-					} else {
-						slog.Debug(fmt.Sprintf("Join event from %s, not target channel %s", ev.Channel, observTarget.generalChannelID))
+					if ev.Channel != observTarget.generalChannelID {
+						slog.Info(fmt.Sprintf("Join event from %s, not target channel %s", ev.Channel, observTarget.generalChannelID))
+						continue
 					}
+
+					mcgMembers, err := c.GetAllMCGMembers(ctx, ev.User)
+					if err != nil {
+						slog.Error("Error getting MCG members", "error", err)
+						continue
+					}
+
+					if _, ok := mcgMembers[ev.User]; !ok {
+						slog.Info("Join event from non-MCG member, skipping", "user", ev.User)
+						continue
+					}
+
+					channelIDs, err := c.GetPrefixedChannels(ctx, fmt.Sprintf("%s-", observTarget.year))
+					if err != nil {
+						slog.Error("Error getting prefixed channels", "error", err)
+						continue
+					}
+					slog.Info("Inviting user to channels", "trigerUser", ev.User, "mcgMembers", mcgMembers, "channelIDs", channelIDs)
+
+					err = c.InviteUsersToChannels(ctx, channelIDs, maps.Keys(mcgMembers))
+					if err != nil {
+						slog.Error("Error inviting user to channels", "error", err)
+						continue
+					}
+
 				} else if ev, ok := innerEvent.Data.(*slackevents.ChannelCreatedEvent); ok {
-					slog.Debug("ChannelCreatedEvent", "event", ev)
+					slog.Info("ChannelCreatedEvent", "event", ev)
 
 					observTarget, err := c.DetermineObservTarget(ctx)
 					if err != nil {
@@ -241,7 +243,7 @@ func (c *Client) HandleSlackEvents(ctx context.Context) {
 					}
 
 					if !strings.HasPrefix(ev.Channel.Name, observTarget.year) {
-						slog.Debug("Ignored channel created event", "channelName", ev.Channel.Name)
+						slog.Info("Ignored channel created event", "channelName", ev.Channel.Name)
 					}
 
 					mcgMembers, err := c.GetAllMCGMembers(ctx, "")
