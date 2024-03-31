@@ -24,8 +24,8 @@ type Client struct {
 
 	cacheDuration time.Duration
 
-	prefixedChannelCache          []string
-	prefixedChannelCacheExpiresAt synchro.Time[tz.AsiaTokyo]
+	prefixedChannelCache          map[string]map[string]string
+	prefixedChannelCacheExpiresAt map[string]synchro.Time[tz.AsiaTokyo]
 
 	mcgMemberCache          map[string]struct{}
 	mcgMemberCacheExpiresAt synchro.Time[tz.AsiaTokyo]
@@ -58,9 +58,15 @@ func NewSlackClient(cfg config.Config) Client {
 	)
 
 	return Client{
-		slackClient:                slackClient,
-		socketClient:               socketClient,
-		cacheDuration:              cfg.SlackCacheDuration,
+		slackClient:   slackClient,
+		socketClient:  socketClient,
+		cacheDuration: cfg.SlackCacheDuration,
+
+		prefixedChannelCache:          make(map[string]map[string]string, 2),
+		prefixedChannelCacheExpiresAt: make(map[string]synchro.Time[tz.AsiaTokyo], 2),
+
+		mcgMemberCache: make(map[string]struct{}, 100),
+
 		determineYearRegex:         regexp.MustCompile(cfg.MCGJoinChannelRegex),
 		determineYearCacheDuration: cfg.SlackDetermineYearCacheDuration,
 	}
@@ -88,10 +94,10 @@ func (c *Client) InviteUsersToChannels(ctx context.Context, channelIDs []string,
 	return nil
 }
 
-func (c *Client) GetPrefixedChannels(ctx context.Context, prefix string) ([]string, error) {
+func (c *Client) GetPrefixedChannels(ctx context.Context, prefix string) (map[string]string, error) {
 	now := synchro.Now[tz.AsiaTokyo]()
-	if c.prefixedChannelCache != nil && now.Before(c.prefixedChannelCacheExpiresAt) {
-		return c.prefixedChannelCache, nil
+	if cache, ok := c.prefixedChannelCache[prefix]; ok && now.Before(c.prefixedChannelCacheExpiresAt[prefix]) {
+		return cache, nil
 	}
 
 	channels, err := c.GetPublicChannels(ctx)
@@ -99,15 +105,15 @@ func (c *Client) GetPrefixedChannels(ctx context.Context, prefix string) ([]stri
 		return nil, err
 	}
 
-	prefixedChannels := make([]string, 0, 20)
+	prefixedChannels := make(map[string]string, 20)
 	for _, channel := range channels {
 		if strings.HasPrefix(channel.Name, prefix) {
-			prefixedChannels = append(prefixedChannels, channel.ID)
+			prefixedChannels[channel.ID] = channel.Name
 		}
 	}
 
-	c.prefixedChannelCache = prefixedChannels
-	c.prefixedChannelCacheExpiresAt = now.Add(c.cacheDuration)
+	c.prefixedChannelCache[prefix] = prefixedChannels
+	c.prefixedChannelCacheExpiresAt[prefix] = now.Add(c.cacheDuration)
 
 	return prefixedChannels, nil
 }
@@ -172,7 +178,81 @@ func (c *Client) GetAllMCGMembers(ctx context.Context, mustIncludeUsers ...strin
 	return mcgMembers, nil
 }
 
-// 新歓チャンネルにMCGを追加する
+// 投稿を転送する
+func (c *Client) ForwardMessage(ctx context.Context, everythingChannelID string, sourceChannelName string, message slackevents.MessageEvent) error {
+	slog.Debug("Forwarding message", "everythingChannelID", everythingChannelID, "sourceChannelName", sourceChannelName, "message", message)
+
+	// Deleted, Updatedの場合は無視する
+	// TODO: 実装する
+	if message.SubType == "message_deleted" || message.SubType == "message_changed" {
+		return nil
+	}
+
+	profile, err := c.slackClient.GetUserProfileContext(ctx, &slack.GetUserProfileParameters{
+		UserID:        message.User,
+		IncludeLabels: false,
+	})
+	if err != nil {
+		slog.Error("Error getting user profile", "error", err)
+	}
+
+	var iconURL string
+	if profile == nil {
+		iconURL = ""
+	} else {
+		iconURL = profile.Image512
+	}
+
+	permalink, err := c.slackClient.GetPermalinkContext(ctx, &slack.PermalinkParameters{
+		Channel: message.Channel,
+		Ts:      message.TimeStamp,
+	})
+
+	if err != nil {
+		slog.Error("Error getting permalink", "error", err)
+	}
+
+	blocks := []slack.Block{
+		&slack.SectionBlock{
+			Type: slack.MBTSection,
+			Text: &slack.TextBlockObject{
+				Type: slack.MarkdownType,
+				Text: fmt.Sprintf("<%s|%s> %s", permalink, sourceChannelName, message.Text),
+			},
+		},
+	}
+	if len(message.Files) > 0 {
+		for _, file := range message.Files {
+			blocks = append(blocks, &slack.ImageBlock{
+				Type: slack.MBTImage,
+				Title: &slack.TextBlockObject{
+					Type: slack.PlainTextType,
+					Text: file.Title,
+				},
+				ImageURL: file.URLPrivate,
+				AltText:  file.Title,
+			})
+		}
+	}
+
+	_, _, err = c.slackClient.PostMessageContext(
+		ctx,
+		everythingChannelID,
+		slack.MsgOptionBlocks(
+			&slack.SectionBlock{
+				Type: slack.MBTSection,
+				Text: &slack.TextBlockObject{
+					Type: slack.MarkdownType,
+					Text: fmt.Sprintf("<%s|`%s`> %s", permalink, sourceChannelName, message.Text),
+				},
+			},
+		),
+		slack.MsgOptionDisableLinkUnfurl(),
+		slack.MsgOptionIconURL(iconURL),
+	)
+	return err
+}
+
 func (c *Client) HandleSlackEvents(ctx context.Context) {
 	for event := range c.socketClient.Events {
 		slog.Debug("Event", "event", event)
@@ -197,6 +277,56 @@ func (c *Client) HandleSlackEvents(ctx context.Context) {
 				slog.Debug("InnerEvent", "innerEvent", innerEvent)
 
 				switch ev := innerEvent.Data.(type) {
+				case *slackevents.MessageEvent:
+					slog.Info("MessageEvent", "event", ev, "channel", ev.Channel)
+
+					observTarget, err := c.DetermineObservTarget(ctx)
+					if err != nil {
+						slog.Error("Error determining MCG channel", "error", err)
+						continue
+					}
+
+					shinkanChannels, err := c.GetPrefixedChannels(ctx, fmt.Sprintf("%s-", observTarget.year))
+					if err != nil {
+						slog.Error("Error getting prefixed channels", "error", err)
+						continue
+					}
+
+					shinkanChannelIDs := maps.Keys(shinkanChannels)
+					if !slices.Contains(shinkanChannelIDs, ev.Channel) {
+						slog.Info(fmt.Sprintf("Message event from %s, not target channel %s", ev.Channel, shinkanChannelIDs))
+						continue
+					}
+
+					var everythingChannelID string
+					for id, name := range shinkanChannels {
+						if name == fmt.Sprintf("%s-everything", observTarget.year) {
+							everythingChannelID = id
+							break
+						}
+					}
+
+					if everythingChannelID == "" {
+						slog.Error("Everything channel not found", "year", observTarget.year)
+						continue
+					}
+
+					if ev.Channel == everythingChannelID {
+						slog.Info("Ignored message event from everything channel", "channel", ev.Channel)
+						continue
+					}
+
+					sourceChanName, ok := shinkanChannels[ev.Channel]
+					if !ok {
+						slog.Error("Source channel not found", "channel", ev.Channel)
+						continue
+					}
+
+					err = c.ForwardMessage(ctx, everythingChannelID, sourceChanName, *ev)
+					if err != nil {
+						slog.Error("Error forwarding message", "error", err)
+						continue
+					}
 				case *slackevents.MemberJoinedChannelEvent:
 					slog.Info("MemberJoinedChannelEvent", "event", ev, "channel", ev.Channel)
 
@@ -222,14 +352,14 @@ func (c *Client) HandleSlackEvents(ctx context.Context) {
 						continue
 					}
 
-					channelIDs, err := c.GetPrefixedChannels(ctx, fmt.Sprintf("%s-", observTarget.year))
+					channels, err := c.GetPrefixedChannels(ctx, fmt.Sprintf("%s-", observTarget.year))
 					if err != nil {
 						slog.Error("Error getting prefixed channels", "error", err)
 						continue
 					}
-					slog.Info("Inviting user to channels", "trigerUser", ev.User, "mcgMembers", mcgMembers, "channelIDs", channelIDs)
+					slog.Info("Inviting user to channels", "trigerUser", ev.User, "mcgMembers", mcgMembers, "channels", channels)
 
-					err = c.InviteUsersToChannels(ctx, channelIDs, maps.Keys(mcgMembers))
+					err = c.InviteUsersToChannels(ctx, maps.Keys(channels), maps.Keys(mcgMembers))
 					if err != nil {
 						slog.Error("Error inviting user to channels", "error", err)
 						continue
@@ -254,15 +384,15 @@ func (c *Client) HandleSlackEvents(ctx context.Context) {
 						continue
 					}
 
-					channelIDs, err := c.GetPrefixedChannels(ctx, fmt.Sprintf("%s-", observTarget.year))
+					channels, err := c.GetPrefixedChannels(ctx, fmt.Sprintf("%s-", observTarget.year))
 					if err != nil {
 						slog.Error("Error getting prefixed channels", "error", err)
 						continue
 					}
 
-					slog.Info("Inviting MCG members to channel", "mcgMembers", mcgMembers, "channelIDs", channelIDs)
+					slog.Info("Inviting MCG members to channel", "mcgMembers", mcgMembers, "channels", channels)
 
-					err = c.InviteUsersToChannels(ctx, channelIDs, maps.Keys(mcgMembers))
+					err = c.InviteUsersToChannels(ctx, maps.Keys(channels), maps.Keys(mcgMembers))
 					if err != nil {
 						slog.Error("Error inviting MCG members to channel", "error", err)
 						continue
