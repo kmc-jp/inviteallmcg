@@ -234,7 +234,7 @@ func (c *Client) ForwardMessage(ctx context.Context, everythingChannelID string,
 			Type: slack.MBTSection,
 			Text: &slack.TextBlockObject{
 				Type: slack.MarkdownType,
-				Text: fmt.Sprintf("<%s|#%s> %s", permalink, sourceChannelName, message.Text),
+				Text: fmt.Sprintf("<%s|`#%s`> %s", permalink, sourceChannelName, message.Text),
 			},
 		},
 	}
