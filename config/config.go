@@ -12,6 +12,7 @@ import (
 type Config struct {
 	SlackUserToken                  string        `env:"SLACK_USER_TOKEN,required"`
 	SlackAppToken                   string        `env:"SLACK_APP_TOKEN,required"`
+	SlackBotToken                   string        `env:"SLACK_BOT_TOKEN,required"`
 	SlackCacheDuration              time.Duration `env:"SLACK_CACHE_DURATION" envDefault:"5m"`
 	SlackDetermineYearCacheDuration time.Duration `env:"SLACK_DETERMINE_YEAR_CACHE_DURATION" envDefault:"72h"`
 

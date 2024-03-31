@@ -19,8 +19,9 @@ import (
 )
 
 type Client struct {
-	slackClient  *slack.Client
-	socketClient *socketmode.Client
+	slackUserClient  *slack.Client
+	socketUserClient *socketmode.Client
+	slackBotClient   *slack.Client
 
 	cacheDuration time.Duration
 
@@ -49,17 +50,20 @@ func NewSlackClient(cfg config.Config) Client {
 	useDebug := cfg.LogLevel == slog.LevelDebug
 	logger := slog.Default()
 
-	slackClient := slack.New(cfg.SlackUserToken, slack.OptionDebug(useDebug), slack.OptionLog(SlackLogger{logger}), slack.OptionAppLevelToken(cfg.SlackAppToken))
+	slackUserClient := slack.New(cfg.SlackUserToken, slack.OptionDebug(useDebug), slack.OptionLog(SlackLogger{logger}), slack.OptionAppLevelToken(cfg.SlackAppToken))
+	slackBotClient := slack.New(cfg.SlackBotToken, slack.OptionDebug(useDebug), slack.OptionLog(SlackLogger{logger}), slack.OptionAppLevelToken(cfg.SlackAppToken))
 
-	socketClient := socketmode.New(
-		slackClient,
+	socketUserClient := socketmode.New(
+		slackUserClient,
 		socketmode.OptionDebug(useDebug),
 		socketmode.OptionLog(SlackLogger{logger}),
 	)
 
 	return Client{
-		slackClient:   slackClient,
-		socketClient:  socketClient,
+		slackUserClient:  slackUserClient,
+		socketUserClient: socketUserClient,
+		slackBotClient:   slackBotClient,
+
 		cacheDuration: cfg.SlackCacheDuration,
 
 		prefixedChannelCache:          make(map[string]map[string]string, 2),
@@ -75,7 +79,7 @@ func NewSlackClient(cfg config.Config) Client {
 func (c *Client) InviteUsersToChannels(ctx context.Context, channelIDs []string, userIDs []string) error {
 	for _, channelID := range channelIDs {
 		//joinしないと招待できない
-		_, warn, _, err := c.slackClient.JoinConversationContext(ctx, channelID)
+		_, warn, _, err := c.slackUserClient.JoinConversationContext(ctx, channelID)
 		if err != nil {
 			slog.Error("Error joining channel", "channelID", channelID, "error", err)
 			continue
@@ -85,7 +89,7 @@ func (c *Client) InviteUsersToChannels(ctx context.Context, channelIDs []string,
 			slog.Warn("Warning joining channel", "channelID", channelID, "warning", warn)
 		}
 
-		if _, err := c.slackClient.InviteUsersToConversationContext(ctx, channelID, userIDs...); err != nil && err.Error() != "already_in_channel" {
+		if _, err := c.slackUserClient.InviteUsersToConversationContext(ctx, channelID, userIDs...); err != nil && err.Error() != "already_in_channel" {
 			slog.Error("Error inviting user to channel", "channelID", channelID, "userIDs", userIDs, "error", err)
 			continue
 		}
@@ -133,7 +137,7 @@ func (c *Client) GetPublicChannels(ctx context.Context) ([]slack.Channel, error)
 	cursor := "dGVhbTpDMDRRV0ZGTkREMQ==" // 2023-general
 
 	for {
-		cs, nextCursor, err := c.slackClient.GetConversationsContext(ctx, &slack.GetConversationsParameters{
+		cs, nextCursor, err := c.slackUserClient.GetConversationsContext(ctx, &slack.GetConversationsParameters{
 			Types:           []string{"public_channel"},
 			ExcludeArchived: true,
 			Cursor:          cursor,
@@ -169,7 +173,7 @@ func (c *Client) GetAllMCGMembers(ctx context.Context, mustIncludeUsers ...strin
 		return c.mcgMemberCache, nil
 	}
 
-	users, err := c.slackClient.GetUsersContext(ctx)
+	users, err := c.slackUserClient.GetUsersContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +207,7 @@ func (c *Client) ForwardMessage(ctx context.Context, everythingChannelID string,
 		return nil
 	}
 
-	profile, err := c.slackClient.GetUserProfileContext(ctx, &slack.GetUserProfileParameters{
+	profile, err := c.slackUserClient.GetUserProfileContext(ctx, &slack.GetUserProfileParameters{
 		UserID:        message.User,
 		IncludeLabels: false,
 	})
@@ -220,7 +224,7 @@ func (c *Client) ForwardMessage(ctx context.Context, everythingChannelID string,
 		displayName = profile.DisplayName
 	}
 
-	permalink, err := c.slackClient.GetPermalinkContext(ctx, &slack.PermalinkParameters{
+	permalink, err := c.slackUserClient.GetPermalinkContext(ctx, &slack.PermalinkParameters{
 		Channel: message.Channel,
 		Ts:      message.TimeStamp,
 	})
@@ -252,7 +256,7 @@ func (c *Client) ForwardMessage(ctx context.Context, everythingChannelID string,
 		}
 	}
 
-	_, _, err = c.slackClient.PostMessageContext(
+	_, _, err = c.slackBotClient.PostMessageContext(
 		ctx,
 		everythingChannelID,
 		slack.MsgOptionBlocks(blocks...),
@@ -264,7 +268,7 @@ func (c *Client) ForwardMessage(ctx context.Context, everythingChannelID string,
 }
 
 func (c *Client) HandleSlackEvents(ctx context.Context) {
-	for event := range c.socketClient.Events {
+	for event := range c.socketUserClient.Events {
 		slog.Debug("Event", "event", event)
 		switch event.Type {
 		case socketmode.EventTypeConnecting:
@@ -279,7 +283,7 @@ func (c *Client) HandleSlackEvents(ctx context.Context) {
 				slog.Debug("Ignored event", "event", event)
 				continue
 			}
-			c.socketClient.Ack(*event.Request)
+			c.socketUserClient.Ack(*event.Request)
 
 			slog.Debug("EventsAPIEvent", "eventsAPIEvent", eventsAPIEvent)
 			if eventsAPIEvent.Type == slackevents.CallbackEvent {
@@ -418,7 +422,7 @@ func (c *Client) HandleSlackEvents(ctx context.Context) {
 }
 
 func (c *Client) Listen(ctx context.Context) error {
-	return c.socketClient.Run()
+	return c.socketUserClient.Run()
 }
 
 type ObservTarget struct {
