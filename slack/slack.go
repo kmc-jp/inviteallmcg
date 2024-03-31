@@ -210,11 +210,13 @@ func (c *Client) ForwardMessage(ctx context.Context, everythingChannelID string,
 		slog.Error("Error getting user profile", "error", err)
 	}
 
-	var iconURL string
+	var iconURL, displayName string
 	if profile == nil {
 		iconURL = ""
+		displayName = message.User
 	} else {
 		iconURL = profile.Image512
+		displayName = profile.DisplayName
 	}
 
 	permalink, err := c.slackClient.GetPermalinkContext(ctx, &slack.PermalinkParameters{
@@ -263,6 +265,7 @@ func (c *Client) ForwardMessage(ctx context.Context, everythingChannelID string,
 		),
 		slack.MsgOptionDisableLinkUnfurl(),
 		slack.MsgOptionIconURL(iconURL),
+		slack.MsgOptionUsername(displayName),
 	)
 	return err
 }
