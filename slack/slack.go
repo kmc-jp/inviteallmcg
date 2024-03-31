@@ -75,11 +75,11 @@ func (c *Client) InviteUsersToChannels(ctx context.Context, channelIDs []string,
 			continue
 		}
 
-		if warn != "" {
+		if warn != "" && warn != "already_in_channel" {
 			slog.Warn("Warning joining channel", "channelID", channelID, "warning", warn)
 		}
 
-		if _, err := c.slackClient.InviteUsersToConversationContext(ctx, channelID, userIDs...); err != nil {
+		if _, err := c.slackClient.InviteUsersToConversationContext(ctx, channelID, userIDs...); err != nil && err.Error() != "already_in_channel" {
 			slog.Error("Error inviting user to channel", "channelID", channelID, "userIDs", userIDs, "error", err)
 			continue
 		}
