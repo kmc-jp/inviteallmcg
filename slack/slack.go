@@ -192,8 +192,8 @@ func (c *Client) GetAllMCGMembers(ctx context.Context, mustIncludeUsers ...strin
 func (c *Client) ForwardMessage(ctx context.Context, everythingChannelID string, sourceChannelName string, message slackevents.MessageEvent) error {
 	slog.Debug("Forwarding message", "everythingChannelID", everythingChannelID, "sourceChannelName", sourceChannelName, "message", message)
 
-	allowedSubTypes := []string{"", "message_deleted", "message_changed", "file_share"}
-	if !slices.Contains(allowedSubTypes, message.SubType) {
+	ignoreSubtypes := []string{"bot_message", "channel_join", "channel_leave", "channel_topic", "channel_purpose", "channel_name", "channel_archive", "channel_unarchive", "pinned_item", "unpinned_item", "reminder_add"}
+	if slices.Contains(ignoreSubtypes, message.SubType) {
 		slog.Info("Ignored message event", "subType", message.SubType)
 		return nil
 	}
