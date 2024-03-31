@@ -172,10 +172,8 @@ func (c *Client) GetAllMCGMembers(ctx context.Context, mustIncludeUsers ...strin
 	return mcgMembers, nil
 }
 
-// 2024-generalにユーザーが追加されるイベントを監視する
-func (c *Client) HandleChannelJoinEvent(ctx context.Context) {
-	slog.Info("Start handling channel join event")
-
+// 新歓チャンネルにMCGを追加する
+func (c *Client) HandleSlackEvents(ctx context.Context) {
 	for event := range c.socketClient.Events {
 		slog.Debug("Event", "event", event)
 		switch event.Type {

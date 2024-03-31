@@ -29,7 +29,7 @@ func main() {
 	slackClient := slack.NewSlackClient(cfg)
 
 	go func() {
-		slackClient.HandleChannelJoinEvent(ctx)
+		slackClient.HandleSlackEvents(ctx)
 	}()
 
 	if err := slackClient.Listen(ctx); err != nil {
