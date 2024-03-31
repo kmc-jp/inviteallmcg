@@ -140,9 +140,15 @@ func (c *Client) GetPublicChannels(ctx context.Context) ([]slack.Channel, error)
 	return channels, nil
 }
 
-func (c *Client) GetAllMCGMembers(ctx context.Context, mustIncludeUser string) (map[string]struct{}, error) {
+func (c *Client) GetAllMCGMembers(ctx context.Context, mustIncludeUsers ...string) (map[string]struct{}, error) {
 	now := synchro.Now[tz.AsiaTokyo]()
-	_, include := c.mcgMemberCache[mustIncludeUser]
+
+	var include bool
+	for _, mustIncludeUser := range mustIncludeUsers {
+		_, ok := c.mcgMemberCache[mustIncludeUser]
+		include = include || ok
+	}
+
 	if c.mcgMemberCache != nil && now.Before(c.mcgMemberCacheExpiresAt) && include {
 		return c.mcgMemberCache, nil
 	}
@@ -227,6 +233,40 @@ func (c *Client) HandleChannelJoinEvent(ctx context.Context) {
 					} else {
 						slog.Debug(fmt.Sprintf("Join event from %s, not target channel %s", ev.Channel, observTarget.generalChannelID))
 					}
+				} else if ev, ok := innerEvent.Data.(*slackevents.ChannelCreatedEvent); ok {
+					slog.Debug("ChannelCreatedEvent", "event", ev)
+
+					observTarget, err := c.DetermineGeneralChannel(ctx)
+					if err != nil {
+						slog.Error("Error determining MCG channel", "error", err)
+						continue
+					}
+
+					if !strings.HasPrefix(ev.Channel.Name, observTarget.year) {
+						slog.Debug("Ignored channel created event", "channelName", ev.Channel.Name)
+					}
+
+					mcgMembers, err := c.GetAllMCGMembers(ctx, "")
+					if err != nil {
+						slog.Error("Error getting MCG members", "error", err)
+						continue
+					}
+
+					channelIDs, err := c.GetPrefixedChannels(ctx, fmt.Sprintf("%s-", observTarget.year))
+					if err != nil {
+						slog.Error("Error getting prefixed channels", "error", err)
+						continue
+					}
+
+					slog.Info("Inviting MCG members to channel", "mcgMembers", mcgMembers, "channelIDs", channelIDs)
+
+					err = c.InviteUsersToChannels(ctx, channelIDs, maps.Keys(mcgMembers))
+					if err != nil {
+						slog.Error("Error inviting MCG members to channel", "error", err)
+						continue
+					}
+				} else {
+					slog.Debug("Ignored inner event", "innerEvent", innerEvent)
 				}
 			}
 		}
