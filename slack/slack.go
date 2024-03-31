@@ -254,15 +254,7 @@ func (c *Client) ForwardMessage(ctx context.Context, everythingChannelID string,
 	_, _, err = c.slackClient.PostMessageContext(
 		ctx,
 		everythingChannelID,
-		slack.MsgOptionBlocks(
-			&slack.SectionBlock{
-				Type: slack.MBTSection,
-				Text: &slack.TextBlockObject{
-					Type: slack.MarkdownType,
-					Text: fmt.Sprintf("<%s|`#%s`> %s", permalink, sourceChannelName, message.Text),
-				},
-			},
-		),
+		slack.MsgOptionBlocks(blocks...),
 		slack.MsgOptionDisableLinkUnfurl(),
 		slack.MsgOptionIconURL(iconURL),
 		slack.MsgOptionUsername(displayName),
