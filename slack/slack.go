@@ -196,7 +196,7 @@ func (c *Client) HandleSlackEvents(ctx context.Context) {
 				innerEvent := eventsAPIEvent.InnerEvent
 				slog.Debug("InnerEvent", "innerEvent", innerEvent)
 				if ev, ok := innerEvent.Data.(*slackevents.MemberJoinedChannelEvent); ok {
-					observTarget, err := c.DetermineGeneralChannel(ctx)
+					observTarget, err := c.DetermineObservTarget(ctx)
 					if err != nil {
 						slog.Error("Error determining MCG channel", "error", err)
 						continue
@@ -234,7 +234,7 @@ func (c *Client) HandleSlackEvents(ctx context.Context) {
 				} else if ev, ok := innerEvent.Data.(*slackevents.ChannelCreatedEvent); ok {
 					slog.Debug("ChannelCreatedEvent", "event", ev)
 
-					observTarget, err := c.DetermineGeneralChannel(ctx)
+					observTarget, err := c.DetermineObservTarget(ctx)
 					if err != nil {
 						slog.Error("Error determining MCG channel", "error", err)
 						continue
@@ -282,7 +282,7 @@ type ObservTarget struct {
 	generalChannelID string
 }
 
-func (c *Client) DetermineGeneralChannel(ctx context.Context) (ObservTarget, error) {
+func (c *Client) DetermineObservTarget(ctx context.Context) (ObservTarget, error) {
 	now := synchro.Now[tz.AsiaTokyo]()
 
 	if c.determineYearCache != (ObservTarget{}) && now.Before(c.determineYearExpiresAt) {
