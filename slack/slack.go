@@ -94,10 +94,20 @@ func (c *Client) InviteUsersToChannels(ctx context.Context, channelIDs []string,
 	return nil
 }
 
-func (c *Client) GetPrefixedChannels(ctx context.Context, prefix string) (map[string]string, error) {
+func (c *Client) GetPrefixedChannels(ctx context.Context, prefix string, mustIncludeChannelIDs ...string) (map[string]string, error) {
 	now := synchro.Now[tz.AsiaTokyo]()
 	if cache, ok := c.prefixedChannelCache[prefix]; ok && now.Before(c.prefixedChannelCacheExpiresAt[prefix]) {
-		return cache, nil
+		useCache := true
+		for _, mustIncludeChannelID := range mustIncludeChannelIDs {
+			if _, ok := cache[mustIncludeChannelID]; !ok {
+				useCache = false
+				break
+			}
+		}
+
+		if useCache {
+			return cache, nil
+		}
 	}
 
 	channels, err := c.GetPublicChannels(ctx)
