@@ -361,6 +361,11 @@ func (c *Client) HandleSlackEvents(ctx context.Context) {
 						continue
 					}
 
+					if observTarget.year == "2024" {
+						// @Riaruayuさんを追加
+						mcgMembers["UQYG1JA95"] = struct{}{}
+					}
+
 					if _, ok := mcgMembers[ev.User]; !ok {
 						slog.Info("Join event from non-MCG member, skipping", "user", ev.User)
 						continue
@@ -396,6 +401,11 @@ func (c *Client) HandleSlackEvents(ctx context.Context) {
 					if err != nil {
 						slog.Error("Error getting MCG members", "error", err)
 						continue
+					}
+
+					if observTarget.year == "2024" {
+						// @Riaruayuさんを追加
+						mcgMembers["UQYG1JA95"] = struct{}{}
 					}
 
 					channels, err := c.GetPrefixedChannels(ctx, fmt.Sprintf("%s-", observTarget.year))
