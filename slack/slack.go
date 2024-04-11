@@ -267,14 +267,14 @@ func (c *Client) ForwardMessage(ctx context.Context, everythingChannelID string,
 	return err
 }
 
-func (c *Client) HandleSlackEvents(ctx context.Context) {
+func (c *Client) HandleSlackEvents(ctx context.Context) error {
 	for event := range c.socketUserClient.Events {
 		slog.Debug("Event", "event", event)
 		switch event.Type {
 		case socketmode.EventTypeConnecting:
 			slog.Info("Connecting to Slack with Socket Mode...")
 		case socketmode.EventTypeConnectionError:
-			slog.Error("Connection error", "error", event.Data)
+			return fmt.Errorf("connection error: %v", event.Data)
 		case socketmode.EventTypeConnected:
 			slog.Info("Connected to Slack with Socket Mode")
 		case socketmode.EventTypeEventsAPI:
@@ -429,6 +429,7 @@ func (c *Client) HandleSlackEvents(ctx context.Context) {
 	}
 
 	slog.Info("End handling channel join event")
+	return nil
 }
 
 func (c *Client) Listen(ctx context.Context) error {

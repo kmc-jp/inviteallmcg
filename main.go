@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/kmc-jp/inviteallmcg/config"
 	"github.com/kmc-jp/inviteallmcg/slack"
 	"github.com/lmittmann/tint"
+	"golang.org/x/sync/errgroup"
 )
 
 func main() {
@@ -28,12 +30,25 @@ func main() {
 
 	slackClient := slack.NewSlackClient(cfg)
 
-	go func() {
-		slackClient.HandleSlackEvents(ctx)
-	}()
+	eg := new(errgroup.Group)
 
-	if err := slackClient.Listen(ctx); err != nil {
-		slog.Error("Error listening", "error", err)
+	eg.Go(func() error {
+		err := slackClient.HandleSlackEvents(ctx)
+		if err != nil {
+			return fmt.Errorf("error handling slack events: %w", err)
+		}
+		return nil
+	})
+
+	eg.Go(func() error {
+		if err := slackClient.Listen(ctx); err != nil {
+			return fmt.Errorf("error listening to slack: %w", err)
+		}
+		return nil
+	})
+
+	if err := eg.Wait(); err != nil {
+		slog.Error("Error running", "error", err)
 		os.Exit(1)
 	}
 }

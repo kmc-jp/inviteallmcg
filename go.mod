@@ -14,4 +14,5 @@ require (
 require (
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/itchyny/timefmt-go v0.1.5 // indirect
+	golang.org/x/sync v0.7.0
 )
