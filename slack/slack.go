@@ -396,6 +396,7 @@ func (c *Client) HandleSlackEvents(ctx context.Context) error {
 
 					if !strings.HasPrefix(ev.Channel.Name, observTarget.year) {
 						slog.Info("Ignored channel created event", "channelName", ev.Channel.Name)
+						continue
 					}
 
 					_, warn, _, err := c.slackBotClient.JoinConversationContext(ctx, ev.Channel.ID)
