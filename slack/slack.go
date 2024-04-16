@@ -376,6 +376,7 @@ func (c *Client) HandleSlackEvents(ctx context.Context) error {
 						slog.Error("Error getting prefixed channels", "error", err)
 						continue
 					}
+
 					slog.Info("Inviting user to channels", "trigerUser", ev.User, "mcgMembers", mcgMembers, "channels", channels)
 
 					err = c.InviteUsersToChannels(ctx, maps.Keys(channels), maps.Keys(mcgMembers))
@@ -395,6 +396,16 @@ func (c *Client) HandleSlackEvents(ctx context.Context) error {
 
 					if !strings.HasPrefix(ev.Channel.Name, observTarget.year) {
 						slog.Info("Ignored channel created event", "channelName", ev.Channel.Name)
+					}
+
+					_, warn, _, err := c.slackBotClient.JoinConversationContext(ctx, ev.Channel.ID)
+					if err != nil {
+						slog.Error("Error joining channel", "channelID", ev.Channel.ID, "error", err)
+						continue
+					}
+
+					if warn != "" && warn != "already_in_channel" {
+						slog.Warn("Warning joining channel", "channelID", ev.Channel.ID, "warning", warn)
 					}
 
 					mcgMembers, err := c.GetAllMCGMembers(ctx, "")
